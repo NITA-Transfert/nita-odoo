@@ -4,5 +4,13 @@
         <field name="name">NITA</field>
         <field name="code">nita</field>
         <field name="state">disabled</field>
+        <!-- payment.provider.redirect_form_view_id / inline_form_view_id sont des
+             Many2one vers ir.ui.view, sans convention de nommage automatique
+             (vérifié contre addons/payment/models/payment_provider.py 17.0) :
+             il faut les pointer explicitement vers nos templates QWeb. Sans ceci,
+             ni le formulaire de redirection (Task 6) ni le champ Numéro MyNITA
+             (Task 9) ne seraient utilisés par le framework payment. -->
+        <field name="redirect_form_view_id" ref="payment_nita.redirect_form"/>
+        <field name="inline_form_view_id" ref="payment_nita.inline_form"/>
     </record>
 </odoo>
