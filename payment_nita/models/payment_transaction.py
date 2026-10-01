@@ -65,7 +65,16 @@ class PaymentTransaction(models.Model):
                 # Payé côté NITA mais Odoo pas à jour (callback manqué) : enregistrer, ne pas recréer.
                 self.write({'nita_request_id': request_id, 'nita_code_achat': prior.nita_code_achat,
                             'nita_montant_achat': prior.nita_montant_achat})
-                self._set_done()
+                # Même garde-fou que le chemin callback : ne jamais valider si le montant
+                # réellement engagé ne correspond plus à la commande courante (ex. commande
+                # modifiée entre deux tentatives).
+                if self._nita_amount_matches({}):
+                    self._set_done()
+                else:
+                    self._set_pending()
+                    self._log_message_on_linked_documents(_(
+                        "Paiement NITA %s reçu mais le montant ne correspond plus à la commande. "
+                        "Vérification manuelle requise.") % prior.nita_code_achat)
                 return {'api_url': prior.nita_url_paiement or self.provider_id.get_base_url()}
             if live == PENDING and prior.nita_url_paiement:
                 self.write({'nita_request_id': request_id, 'nita_code_achat': prior.nita_code_achat,
