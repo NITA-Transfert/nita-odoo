@@ -1,0 +1,48 @@
+# Stack E2E payment_nita : Odoo 17 + Postgres 16, module monté en lecture seule,
+# `nita-transfert-sdk` installé dans l'image Odoo (voir Dockerfile).
+#
+# Le service `odoo` démarre IDLE (entrypoint `tail -f /dev/null`) : c'est
+# `e2e/run.sh` qui pilote `odoo` (install, shell, serveur) via
+# `docker compose exec`, pour pouvoir capturer précisément chaque étape
+# (log d'installation, scripts shell, sonde HTTP) plutôt que de dépendre du
+# comportement du conteneur au démarrage.
+#
+# Usage : voir e2e/run.sh (orchestration complète). Démarrage manuel :
+#   docker compose -f e2e/docker-compose.yml up -d --build
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+    volumes:
+      - nita_e2e_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  odoo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      HOST: db
+      USER: odoo
+      PASSWORD: odoo
+    volumes:
+      - ../payment_nita:/mnt/extra-addons/payment_nita:ro
+      - nita_e2e_filestore:/var/lib/odoo
+    ports:
+      - "8169:8069"
+    entrypoint: ["tail", "-f", "/dev/null"]
+
+volumes:
+  nita_e2e_db:
+  nita_e2e_filestore:
