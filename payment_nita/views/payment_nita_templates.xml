@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="redirect_form" name="Formulaire de redirection NITA">
+        <form id="o_payment_redirect_form" t-att-action="api_url" method="get" target="_top"/>
+    </template>
+
+    <!-- Formulaire inline NITA : saisie du numero MyNITA au checkout (Task 9).
+         Rendu par le framework payment 17.0 a l'interieur du conteneur
+         div[name="o_payment_inline_form"] de l'option de paiement NITA, avec
+         `provider_id`/`partner_id` fournis dans le contexte QWeb (meme convention
+         que payment_demo.inline_form). Pre-rempli depuis le telephone du partenaire
+         quand il est connu ; `request` est disponible dans ce contexte (comme dans
+         toutes les vues portail/website). -->
+    <template id="inline_form" name="Formulaire NITA (numero MyNITA)">
+        <t t-set="nita_partner_sudo" t-value="request.env['res.partner'].sudo().browse(partner_id)"/>
+        <div class="mb-3">
+            <label for="nita_phone" class="form-label">Numéro MyNITA</label>
+            <input type="tel"
+                   name="nita_phone"
+                   id="nita_phone"
+                   class="form-control"
+                   required="required"
+                   t-att-value="nita_partner_sudo.phone or nita_partner_sudo.mobile or ''"
+                   placeholder="+227XXXXXXXX"/>
+            <small class="form-text text-muted">
+                Numéro de téléphone associé à votre compte MyNITA, utilisé pour recevoir et valider ce paiement.
+            </small>
+        </div>
+    </template>
+</odoo>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="payment_provider_nita" model="payment.provider">
+        <field name="name">NITA</field>
+        <field name="code">nita</field>
+        <field name="state">disabled</field>
+        <!-- payment.provider.redirect_form_view_id / inline_form_view_id sont des
+             Many2one vers ir.ui.view, sans convention de nommage automatique
+             (vérifié contre addons/payment/models/payment_provider.py 17.0) :
+             il faut les pointer explicitement vers nos templates QWeb. Sans ceci,
+             ni le formulaire de redirection (Task 6) ni le champ Numéro MyNITA
+             (Task 9) ne seraient utilisés par le framework payment. -->
+        <field name="redirect_form_view_id" ref="payment_nita.redirect_form"/>
+        <field name="inline_form_view_id" ref="payment_nita.inline_form"/>
+        <!-- Sans ce lien, _get_compatible_payment_methods ne retourne jamais
+             rien pour ce provider : NITA n'apparaitrait dans aucune liste de
+             moyens de paiement au checkout (Finding 2, rapport E2E Task 10).
+             Calque sur payment_demo.payment_provider_demo /
+             payment_custom.payment_provider_transfer. -->
+        <field name="payment_method_ids"
+               eval="[Command.set([
+                         ref('payment_nita.payment_method_nita'),
+                     ])]"
+        />
+    </record>
+</odoo>

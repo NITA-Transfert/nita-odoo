@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+
+    <!-- Calque sur payment_demo/payment_custom (Odoo 17.0, verifie dans le
+         conteneur E2E Task 10) : un provider n'apparait comme option de
+         paiement au checkout QUE s'il a au moins un payment.method
+         compatible (payment.method._get_compatible_payment_methods filtre
+         sur provider_ids + is_primary=True). Sans cet enregistrement, NITA
+         ne serait jamais selectionnable (Finding 2 du rapport E2E). Le lien
+         inverse (provider_ids) se fait depuis le provider via
+         payment_method_ids, cf. data/payment_provider_data.xml. -->
+    <record id="payment_method_nita" model="payment.method">
+        <field name="name">NITA</field>
+        <field name="code">nita</field>
+        <field name="sequence">1</field>
+        <field name="image" type="base64" file="payment_nita/static/img/nita.png"/>
+        <field name="support_tokenization">False</field>
+        <field name="support_express_checkout">False</field>
+        <field name="support_refund"></field>
+    </record>
+
+</odoo>

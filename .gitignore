@@ -4,3 +4,4 @@ __pycache__/
 *.zip
 .superpowers/
 .pytest_cache/
+e2e/.out/
