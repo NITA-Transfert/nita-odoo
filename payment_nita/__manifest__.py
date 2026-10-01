@@ -8,6 +8,7 @@
     'depends': ['payment', 'website_sale'],
     'external_dependencies': {'python': ['nita_sdk']},
     'data': [
+        'security/ir.model.access.csv',
         'views/payment_nita_templates.xml',
         'views/payment_provider_views.xml',
         'data/payment_provider_data.xml',
