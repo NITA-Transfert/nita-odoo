@@ -6,4 +6,4 @@ except ImportError:
 
 if _HAS_ODOO:
     from . import models
-    # from . import controllers   # décommenté par la Tâche 8
+    from . import controllers
