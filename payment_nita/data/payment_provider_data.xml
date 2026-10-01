@@ -12,5 +12,15 @@
              (Task 9) ne seraient utilisés par le framework payment. -->
         <field name="redirect_form_view_id" ref="payment_nita.redirect_form"/>
         <field name="inline_form_view_id" ref="payment_nita.inline_form"/>
+        <!-- Sans ce lien, _get_compatible_payment_methods ne retourne jamais
+             rien pour ce provider : NITA n'apparaitrait dans aucune liste de
+             moyens de paiement au checkout (Finding 2, rapport E2E Task 10).
+             Calque sur payment_demo.payment_provider_demo /
+             payment_custom.payment_provider_transfer. -->
+        <field name="payment_method_ids"
+               eval="[Command.set([
+                         ref('payment_nita.payment_method_nita'),
+                     ])]"
+        />
     </record>
 </odoo>

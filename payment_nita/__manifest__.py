@@ -11,7 +11,8 @@
         'security/ir.model.access.csv',
         'views/payment_nita_templates.xml',
         'views/payment_provider_views.xml',
-        'data/payment_provider_data.xml',
+        'data/payment_method_data.xml',
+        'data/payment_provider_data.xml',  # Depends on `payment_method_nita`.
     ],
     'assets': {
         'web.assets_frontend': [

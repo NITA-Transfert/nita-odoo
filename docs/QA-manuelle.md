@@ -43,26 +43,26 @@ connecter en admin, il faut d'abord en definir un (`odoo shell` ->
 `env.ref('base.user_admin').write({'password': '...'})`) ou utiliser le
 mode `--dev=reload` localement.
 
-## 2. Point d'attention decouvert pendant l'E2E — a faire avant tout test de checkout reel
+## 2. `payment.method` NITA — corrige
 
-**Le provider `nita` n'a aucun `payment.method` associe.** En Odoo 17, un
-provider de paiement n'apparait comme option de paiement au checkout QUE s'il
-a au moins un `payment.method` compatible lie via `payment_method_ids`
-(`payment.method._get_compatible_payment_methods`, verifie contre le source
-officiel `addons/payment/models/payment_method.py`). Tous les providers de
-premiere partie (`payment_demo`, `payment_custom`, etc.) expedient :
-- un `data/payment_method_data.xml` creant un `payment.method` (`code='nita'`
-  par exemple),
-- le wiring `payment_method_ids` sur l'enregistrement provider dans
-  `data/payment_provider_data.xml`.
+**Mise a jour (2026-10-01) : corrige.** `payment_nita/data/payment_method_data.xml`
+cree desormais un `payment.method` (`code='nita'`, icone minimale
+`static/img/nita.png`), lie au provider via `payment_method_ids` dans
+`data/payment_provider_data.xml` — sur le modele exact de
+`payment_demo`/`payment_custom` (verifie contre le source officiel
+`addons/payment/models/payment_method.py::_get_compatible_payment_methods`,
+qui filtre sur `provider_ids` + `is_primary=True`).
 
-`payment_nita` n'a ni l'un ni l'autre aujourd'hui. **Consequence concrete :
-si vous testez le checkout a la main maintenant, NITA n'apparaitra dans
-aucune liste de moyens de paiement**, meme avec le provider a l'etat
-`enabled`/`test` et une devise XOF correcte. Ce n'est pas un bug de l'E2E :
-reproduit et trace precisement (voir `.superpowers/sdd/odoo/e2e-report.md`,
-section « Finding 2 »). A corriger (hors perimetre de cette tache 10) avant
-tout essai de checkout reel ou toute demo.
+Reverifie dans le conteneur apres correctif :
+- `odoo -u payment_nita -d test --stop-after-init` -> 0 erreur.
+- `provider.payment_method_ids` -> non vide (`['nita']`).
+- `env['payment.method']._get_compatible_payment_methods(provider_ids=[provider.id], ...)`
+  renvoie bien la methode NITA.
+- `e2e/run.sh` rejoue : toujours 6/6 PASS (ce correctif ne touche pas le
+  chemin callback).
+
+Le checkout n'est donc plus bloque par ce manque. Detail complet dans
+`.superpowers/sdd/odoo/e2e-report.md` (section « Finding 2 (corrige) »).
 
 ## 3. `createAchat` live contre un sandbox NITA reel — a faire par vous
 
@@ -89,9 +89,10 @@ que `nita_code_achat` est renseigne. **Ne validez jamais le paiement sur la
 page NITA** : l'objectif est seulement de verifier que `createAchat`
 reussit et renvoie un lien ; laissez la transaction en `draft`/`pending`.
 
-## 4. Checkout bout-en-bout dans l'IHM — a faire par vous, apres avoir corrige le point 2
+## 4. Checkout bout-en-bout dans l'IHM — a faire par vous
 
-Une fois le `payment.method` cable (point 2) :
+Le `payment.method` est desormais cable (point 2) ; reste a verifier a la
+main dans un vrai navigateur (l'E2E automatise ne clique jamais l'IHM) :
 
 1. Installer `website_sale` + `payment_nita`, activer le provider NITA
    (devise XOF, secret HMAC, `state='test'` ou `enabled`).
