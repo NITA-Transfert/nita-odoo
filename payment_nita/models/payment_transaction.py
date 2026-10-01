@@ -15,6 +15,7 @@ class PaymentTransaction(models.Model):
     nita_code_achat = fields.Char(readonly=True)
     nita_url_paiement = fields.Char(readonly=True)
     nita_request_id = fields.Char(readonly=True)
+    nita_montant_achat = fields.Integer(readonly=True)
     nita_phone = fields.Char("Numéro MyNITA")
 
     def _nita_source_reference(self):
@@ -36,7 +37,7 @@ class PaymentTransaction(models.Model):
         from nita_sdk.client import unwrap
         r = unwrap(self.provider_id._nita_client().achat.check_achat_status(
             CheckAchatStatusModel(request_id=request_id, adresse_ip=ip)))
-        return map_nita_status(getattr(r, 'status_transaction', None))
+        return map_nita_status(getattr(r, 'code', None))
 
     def _get_specific_rendering_values(self, processing_values):
         res = super()._get_specific_rendering_values(processing_values)
@@ -62,12 +63,14 @@ class PaymentTransaction(models.Model):
                 live = PENDING  # erreur réseau : défaut prudent (réutiliser)
             if live == PAID:
                 # Payé côté NITA mais Odoo pas à jour (callback manqué) : enregistrer, ne pas recréer.
-                self.write({'nita_request_id': request_id, 'nita_code_achat': prior.nita_code_achat})
+                self.write({'nita_request_id': request_id, 'nita_code_achat': prior.nita_code_achat,
+                            'nita_montant_achat': prior.nita_montant_achat})
                 self._set_done()
                 return {'api_url': prior.nita_url_paiement or self.provider_id.get_base_url()}
             if live == PENDING and prior.nita_url_paiement:
                 self.write({'nita_request_id': request_id, 'nita_code_achat': prior.nita_code_achat,
-                            'nita_url_paiement': prior.nita_url_paiement})
+                            'nita_url_paiement': prior.nita_url_paiement,
+                            'nita_montant_achat': prior.nita_montant_achat})
                 return {'api_url': prior.nita_url_paiement}  # même lien, pas de 2e achat
             # annulé / échec (ou pending sans URL) -> recréer ci-dessous (NITA autorise la réutilisation après annulation).
         callback_url = self.provider_id.get_base_url() + '/payment/nita/webhook'
@@ -90,6 +93,7 @@ class PaymentTransaction(models.Model):
             'nita_request_id': args['request_id'],
             'nita_code_achat': result.code_achat,
             'nita_url_paiement': result.url_paiement or '',
+            'nita_montant_achat': args['montant_transaction'],
         })
         if not result.url_paiement:
             raise ValidationError(_("NITA : page de paiement indisponible."))
@@ -128,12 +132,12 @@ class PaymentTransaction(models.Model):
         # 'none' -> rien (reste pending)
 
     def _nita_amount_matches(self, notification_data):
-        """Le montant payé (si présent dans le callback) doit correspondre à la transaction."""
-        raw = notification_data.get('montant') or notification_data.get('montantTransaction')
-        if raw in (None, ''):
-            return True  # callback sans montant : on s'en remet au statut signé
-        try:
-            from ..lib.mapping import amount_xof
-            return amount_xof(raw) == amount_xof(self.amount)
-        except (TypeError, ValueError):
-            return False
+        """Le callback v2 réel ne transporte PAS de montant ({status, transaction_id}
+        seulement) : on compare donc le montant réellement engagé auprès de NITA
+        (nita_montant_achat, fixé à la création/réutilisation de l'achat) au montant
+        courant de la transaction. Incohérent si l'achat réutilisé a été créé pour un
+        autre montant que la commande actuelle -> jamais validé automatiquement."""
+        from ..lib.mapping import amount_xof
+        if not self.nita_montant_achat:
+            return True  # pas de montant engagé connu : on s'en remet au statut signé
+        return self.nita_montant_achat == amount_xof(self.amount)
