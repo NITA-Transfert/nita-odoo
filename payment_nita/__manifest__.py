@@ -13,6 +13,7 @@
         'views/payment_provider_views.xml',
         'data/payment_method_data.xml',
         'data/payment_provider_data.xml',  # Depends on `payment_method_nita`.
+        'data/nita_cron.xml',
     ],
     'assets': {
         'web.assets_frontend': [

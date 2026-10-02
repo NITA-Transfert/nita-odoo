@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+
+    <!-- Réconciliation des paiements NITA en attente.
+         Le paiement se fait sur une page NITA externe et le callback peut ne pas
+         parvenir (le sandbox n'en émet pas ; en prod un webhook peut se perdre).
+         Ce job interroge périodiquement le statut réel côté NITA et confirme/annule
+         les transactions encore en attente, pour qu'une commande payée ne reste pas
+         bloquée (et ne re-propose pas le paiement). -->
+    <record id="cron_nita_reconcile_pending" model="ir.cron">
+        <field name="name">NITA : réconciliation des paiements en attente</field>
+        <field name="model_id" ref="payment.model_payment_transaction"/>
+        <field name="state">code</field>
+        <field name="code">model._nita_cron_reconcile_pending()</field>
+        <field name="interval_number">10</field>
+        <field name="interval_type">minutes</field>
+        <field name="active" eval="True"/>
+    </record>
+
+</odoo>
