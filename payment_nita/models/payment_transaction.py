@@ -92,6 +92,7 @@ class PaymentTransaction(models.Model):
                 callback_url=callback_url,
                 phone=self.nita_phone,
                 ip='',  # IP client indisponible côté serveur ici -> repli '0.0.0.0' dans la lib
+                return_url=self.provider_id.get_base_url() + '/payment/nita/return',
             )
             result = unwrap(self.provider_id._nita_client().achat.add_achat_enligne(
                 AchatEnLigneModel(**args)))
