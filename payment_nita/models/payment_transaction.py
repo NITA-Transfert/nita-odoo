@@ -152,6 +152,30 @@ class PaymentTransaction(models.Model):
             return True  # pas de montant engagé connu : on s'en remet au statut signé
         return self.nita_montant_achat == amount_xof(self.amount)
 
+    def _nita_reconcile_live(self):
+        """Re-interroge le STATUT RÉEL côté NITA (checkAchatStatus) et confirme/annule/échoue
+        en conséquence. Partagée par le cron de réconciliation ET le contrôleur de retour.
+        Idempotente ; le plugin ne paie jamais (lecture du statut + MAJ locale). Lève en cas
+        d'erreur réseau (l'appelant décide quoi en faire)."""
+        self.ensure_one()
+        if self.provider_code != 'nita':
+            return
+        if self.state == 'done':
+            return  # idempotent
+        status = self._nita_status(self.nita_request_id)
+        action = reconcile_action(status, self._nita_amount_matches({}))
+        if action == 'done':
+            self._set_done()
+            try:
+                self._finalize_post_processing()
+            except Exception:
+                _logger.exception("NITA: finalisation de %s a échoué (retentée par Odoo)", self.reference)
+        elif action == 'cancel':
+            self._set_canceled()
+        elif action == 'error':
+            self._set_error(_("Paiement NITA non abouti."))
+        # 'review' / 'none' -> laisser en attente
+
     @api.model
     def _nita_cron_reconcile_pending(self, limit=80):
         """Tâche planifiée : rattrape les paiements dont le callback n'est jamais arrivé.
@@ -168,23 +192,8 @@ class PaymentTransaction(models.Model):
         ], limit=limit)
         for tx in txs:
             try:
-                status = tx._nita_status(tx.nita_request_id)
+                tx._nita_reconcile_live()
             except Exception:
-                _logger.exception("NITA cron: statut indisponible pour %s", tx.reference)
-                continue  # erreur réseau/API : on retentera au prochain passage
-            action = reconcile_action(status, tx._nita_amount_matches({}))
-            if action == 'done':
-                tx._set_done()
-                # Confirme la commande/facture liée immédiatement. En cas d'échec (ex. config
-                # comptable incomplète), le cron intégré d'Odoo `_cron_finalize_post_processing`
-                # retentera (la tx reste `done` avec is_post_processed=False).
-                try:
-                    tx._finalize_post_processing()
-                except Exception:
-                    _logger.exception("NITA cron: finalisation de %s a échoué (retentée par Odoo)", tx.reference)
-            elif action == 'cancel':
-                tx._set_canceled()
-            elif action == 'error':
-                tx._set_error(_("Paiement NITA non abouti."))
-            # 'review' / 'none' : on laisse en attente (vérification manuelle / pas encore payé)
+                _logger.exception("NITA cron: reconcile live indisponible pour %s", tx.reference)
+                continue
         return True

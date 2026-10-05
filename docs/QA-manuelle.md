@@ -109,7 +109,33 @@ main dans un vrai navigateur (l'E2E automatise ne clique jamais l'IHM) :
    le callback (section 1) est la seule source de verite pour l'etat de la
    transaction, jamais le retour navigateur.
 
-## 5. Dependance SDK — rappel
+## 5. Retour navigateur apres paiement — a faire par vous
+
+Depuis l'ajout de `urlRetour` (envoye a `createAchat`) et du controleur
+`/payment/nita/return` (verification du jeton signe + re-check live via
+`checkAchatStatus`), le navigateur peut confirmer le paiement immediatement
+au retour, sans attendre le cron de reconciliation. A verifier a la main
+(hors de portee de l'E2E Docker, qui ne clique jamais l'IHM) :
+
+1. **Installer le SDK avec `urlRetour`** : `pip install -e
+   <chemin>/nita-sdks/sdks/python` dans le conteneur Odoo. Sans cette
+   version a jour du SDK, le champ `urlRetour` est ignore par `AchatEnLigneModel`
+   et le retour signe ne se declenche jamais (NITA ne redirige alors nulle
+   part de particulier apres paiement).
+2. **Payer un achat en sandbox** et verifier que le navigateur est bien
+   redirige de la page de paiement NITA vers
+   `/payment/nita/return?codeAchat=...&requestId=...&ts=...&sig=...`, puis
+   immediatement vers `/payment/status`. La commande doit passer a `done`
+   des ce retour (visible dans l'IHM ou via `env['payment.transaction']...state`),
+   **sans attendre** le prochain passage du cron `_nita_cron_reconcile_pending`.
+3. **Falsifier `sig`** dans l'URL de retour (changer un caractere) et
+   rejouer la requete : la commande ne doit **pas** etre confirmee par ce
+   chemin (`verify_return_token` rejette, un warning est journalise) — seul
+   le callback ou le cron peuvent encore la faire passer a `done`. Le
+   navigateur doit malgre tout atterrir sur `/payment/status` (jamais
+   d'erreur visible pour l'utilisateur sur un jeton invalide/perime).
+
+## 6. Dependance SDK — rappel
 
 `e2e/Dockerfile` installe `nita-transfert-sdk==0.1.0b1` (PyPI) **puis**
 ecrase `nita_sdk/client/callback.py` et `nita_sdk/client/__init__.py` par la
