@@ -1,6 +1,6 @@
 {
     'name': 'NITA - Paiement en ligne',
-    'version': '17.0.1.0.0',
+    'version': '17.0.1.1.0',
     'category': 'Accounting/Payment Providers',
     'summary': 'Encaissez via NITA (Achat en ligne)',
     'author': 'NITA Transfert',
@@ -22,4 +22,9 @@
     },
     'application': False,
     'installable': True,
+    # Enregistre NITA comme account.payment.method à l'installation (comme
+    # Stripe/Flutterwave) — sinon le journal n'a pas de ligne NITA et la
+    # finalisation comptable d'un paiement échoue.
+    'post_init_hook': 'post_init_hook',
+    'uninstall_hook': 'uninstall_hook',
 }
