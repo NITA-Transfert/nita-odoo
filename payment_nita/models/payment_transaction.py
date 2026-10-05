@@ -3,8 +3,8 @@ import logging
 from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
 
-from ..lib.mapping import build_achat_args, request_id_for_order
-from ..lib.decision import map_nita_status, reconcile_action, PAID, PENDING
+from ..lib.mapping import amount_xof, build_achat_args, request_id_for_order
+from ..lib.decision import map_nita_status, prior_attempt_action, reconcile_action
 
 _logger = logging.getLogger(__name__)
 
@@ -39,6 +39,20 @@ class PaymentTransaction(models.Model):
             CheckAchatStatusModel(request_id=request_id, adresse_ip=ip)))
         return map_nita_status(getattr(r, 'code', None))
 
+    def _nita_cancel(self):
+        """Annule l'achat NITA de cette tentative (encore 'non payé') et clôt la tentative.
+        Lève ValidationError si NITA refuse : on ne recrée jamais par-dessus un achat payable."""
+        self.ensure_one()
+        from nita_sdk.models import AnnulationAchatDto
+        from nita_sdk.client import unwrap
+        try:
+            unwrap(self.provider_id._nita_client().achat.annuler_achat(AnnulationAchatDto(
+                code_achat=self.nita_code_achat, request_id=self.nita_request_id, adresse_ip='0.0.0.0')))
+        except Exception:
+            _logger.exception("NITA annulerAchat a échoué pour %s", self.nita_code_achat)
+            raise ValidationError(_("Le paiement NITA précédent n'a pas pu être annulé. Réessayez dans un instant."))
+        self.sudo()._set_canceled()
+
     def _get_specific_rendering_values(self, processing_values):
         res = super()._get_specific_rendering_values(processing_values)
         if self.provider_code != 'nita':
@@ -60,9 +74,15 @@ class PaymentTransaction(models.Model):
             try:
                 live = self._nita_status(request_id)
             except Exception:
-                live = PENDING  # erreur réseau : défaut prudent (réutiliser)
-            if live == PAID:
-                # Payé côté NITA mais Odoo pas à jour (callback manqué) : enregistrer, ne pas recréer.
+                # Sans statut réel, on ne sait pas si l'ancien lien est encore payable : ne jamais
+                # y renvoyer le client à l'aveugle (il peut être déjà réglé, ou pour un autre montant).
+                _logger.exception("NITA checkAchatStatus a échoué pour %s", request_id)
+                raise ValidationError(_("NITA est momentanément injoignable. Réessayez dans un instant."))
+            action = prior_attempt_action(
+                live, prior.nita_montant_achat == amount_xof(self.amount), bool(prior.nita_url_paiement))
+            if action == 'paid':
+                # Payé côté NITA mais Odoo pas à jour (callback manqué) : enregistrer, ne pas recréer,
+                # et envoyer le client sur la page de statut Odoo (pas sur la page NITA déjà réglée).
                 self.write({'nita_request_id': request_id, 'nita_code_achat': prior.nita_code_achat,
                             'nita_montant_achat': prior.nita_montant_achat})
                 # Même garde-fou que le chemin callback : ne jamais valider si le montant
@@ -75,13 +95,17 @@ class PaymentTransaction(models.Model):
                     self._log_message_on_linked_documents(_(
                         "Paiement NITA %s reçu mais le montant ne correspond plus à la commande. "
                         "Vérification manuelle requise.") % prior.nita_code_achat)
-                return {'api_url': prior.nita_url_paiement or self.provider_id.get_base_url()}
-            if live == PENDING and prior.nita_url_paiement:
+                return {'api_url': self.provider_id.get_base_url() + '/payment/status'}
+            if action == 'reuse':
                 self.write({'nita_request_id': request_id, 'nita_code_achat': prior.nita_code_achat,
                             'nita_url_paiement': prior.nita_url_paiement,
                             'nita_montant_achat': prior.nita_montant_achat})
                 return {'api_url': prior.nita_url_paiement}  # même lien, pas de 2e achat
-            # annulé / échec (ou pending sans URL) -> recréer ci-dessous (NITA autorise la réutilisation après annulation).
+            if action == 'cancel_and_create':
+                # Ancien achat encore payable mais pour un autre montant : l'annuler, sinon le
+                # client pourrait encore le régler, et NITA refuserait de recréer ce requestId.
+                prior._nita_cancel()
+            # annulé / échec -> recréer ci-dessous (NITA autorise la réutilisation après annulation).
         callback_url = self.provider_id.get_base_url() + '/payment/nita/webhook'
         try:
             args = build_achat_args(
