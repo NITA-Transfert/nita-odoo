@@ -49,3 +49,11 @@ def test_build_achat_args_ip_fallback_and_items_fallback():
     assert a['adresse_ip'] == '0.0.0.0'          # SDK exige adresse_ip non vide
     assert a['description_achat'] == ['Commande S00001']  # repli si pas d'articles
     assert 'S00001' in a['motif_transaction']
+
+def test_build_achat_args_url_retour():
+    a = build_achat_args(**_base(), return_url='https://shop/odoo/return')
+    assert a['url_retour'] == 'https://shop/odoo/return'
+
+def test_build_achat_args_url_retour_absent_par_defaut():
+    a = build_achat_args(**_base())
+    assert a['url_retour'] == ''

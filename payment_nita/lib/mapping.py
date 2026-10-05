@@ -13,7 +13,7 @@ def amount_xof(total):
     """Montant envoyé à NITA : le XOF n'a pas de décimales."""
     return int(round(float(total)))
 
-def build_achat_args(*, reference, total, currency, items, callback_url, phone, ip=''):
+def build_achat_args(*, reference, total, currency, items, callback_url, phone, ip='', return_url=''):
     """Construit les arguments de createAchat (attributs snake du modèle SDK).
     Géoloc omise (facultative pour l'achat en ligne). Lève ValueError si invalide."""
     if str(currency or '').upper() != 'XOF':
@@ -34,5 +34,6 @@ def build_achat_args(*, reference, total, currency, items, callback_url, phone, 
         'description_achat': libelles,
         'motif_transaction': 'Commande ' + str(reference),
         'url_callback': str(callback_url or ''),
+        'url_retour': str(return_url or ''),
         'adresse_ip': (str(ip or '').strip() or '0.0.0.0'),
     }

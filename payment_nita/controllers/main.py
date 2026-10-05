@@ -53,9 +53,28 @@ class NitaController(http.Controller):
     @http.route('/payment/nita/return', type='http', auth='public', methods=['GET'],
                 csrf=False, save_session=False)
     def nita_return(self, **kwargs):
-        """Retour navigateur après la page de paiement NITA : l'état réel de la
-        transaction est déterminé par le callback (source de vérité), pas par ce
-        retour. On renvoie simplement le client vers l'écran de statut de paiement."""
+        """Retour navigateur signé après la page de paiement NITA. On vérifie la signature
+        (authenticité + fraîcheur) PUIS on re-vérifie le statut réel via checkAchatStatus
+        (le jeton seul ne vaut jamais preuve de paiement), on confirme/annule, et on renvoie
+        le client vers l'écran de statut Odoo. Le callback reste la source de vérité ; ce
+        retour n'est qu'une confirmation immédiate pour l'UX. Jamais de paiement via l'API."""
+        code = kwargs.get('codeAchat')
+        rid = kwargs.get('requestId')
+        ts = kwargs.get('ts')
+        sig = kwargs.get('sig')
+        provider = request.env['payment.provider'].sudo().search([('code', '=', 'nita')], limit=1)
+        if provider and provider.nita_hmac_secret and code and rid and ts and sig:
+            from ..lib.return_token import verify_return_token
+            if verify_return_token(provider.nita_hmac_secret, code, rid, ts, sig):
+                tx = request.env['payment.transaction'].sudo().search(
+                    [('nita_code_achat', '=', code), ('provider_code', '=', 'nita')], limit=1)
+                if tx:
+                    try:
+                        tx._nita_reconcile_live()
+                    except Exception:
+                        _logger.exception("NITA return: reconcile live a échoué pour %s", code)
+            else:
+                _logger.warning("NITA return: jeton invalide/périmé (codeAchat=%s)", code)
         return request.redirect('/payment/status')
 
 
