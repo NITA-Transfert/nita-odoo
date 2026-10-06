@@ -29,3 +29,17 @@ def reconcile_action(status, amount_matches):
     if status == FAILED:
         return 'error'
     return 'none'
+
+def prior_attempt_action(live_status, amount_matches, has_url):
+    """Que faire d'une tentative antérieure de la même commande (même requestId), selon son
+    statut RÉEL côté NITA :
+    - payé -> 'paid' : enregistrer le paiement, jamais renvoyer le client sur le lien réglé ;
+    - en attente, même montant, lien connu -> 'reuse' ;
+    - en attente mais montant changé (panier modifié) ou lien inconnu -> 'cancel_and_create'
+      (NITA refuse un requestId encore 'non payé' : annuler avant de recréer) ;
+    - annulé / bloqué -> 'create'."""
+    if live_status == PAID:
+        return 'paid'
+    if live_status == PENDING:
+        return 'reuse' if (amount_matches and has_url) else 'cancel_and_create'
+    return 'create'
