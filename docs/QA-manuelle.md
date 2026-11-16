@@ -137,12 +137,6 @@ au retour, sans attendre le cron de reconciliation. A verifier a la main
 
 ## 6. Dependance SDK — rappel
 
-`e2e/Dockerfile` installe `nita-transfert-sdk==0.1.0b1` (PyPI) **puis**
-ecrase `nita_sdk/client/callback.py` et `nita_sdk/client/__init__.py` par la
-version a jour du monorepo `nita-sdks` (voir `e2e/sdk-patch/README.md`) : au
-2026-10-01, le paquet PyPI publie ne contient pas encore
-`verify_callback`/`NitaCallbackError`. **Ce correctif est uniquement dans ce
-kit E2E, pas dans `payment_nita`.** Pour un deploiement reel aujourd'hui
-(hors de ce kit Docker), le webhook `/payment/nita/webhook` plantera a
-l'import tant que `nita-transfert-sdk` n'est pas republie sur PyPI avec ce
-module inclus — a signaler/suivre separement (depot `nita-sdks`).
+`e2e/Dockerfile` installe `nita-transfert-sdk==0.1.0b2` depuis PyPI (premiere
+version publiee avec `NitaClient` et `url_retour`). Aucun correctif local du SDK
+n'est necessaire : le webhook n'importe plus `nita_sdk.client.callback`.

@@ -9,46 +9,6 @@ portail client via NITA : le client est redirigé vers la page de paiement
 NITA, et la commande/facture est validée à la réception du **callback NITA**, qui déclenche la relecture
 du statut réel (jamais sur la foi du callback lui-même ni du retour navigateur).
 
-## ⚠️ Avertissement bloquant — paquet PyPI en retard
-
-La version actuellement publiée sur PyPI, **`nita-transfert-sdk==0.1.0b1`**
-(seule version disponible à ce jour), **ne contient pas** le module
-`nita_sdk.client.callback` (`verify_callback`, `NitaCallbackError`) que le
-controller webhook de ce module importe
-(`payment_nita/controllers/main.py`). Un `pip install nita-transfert-sdk`
-« à la lettre » installe donc un SDK qui **plante à l'import** dès la
-première notification NITA :
-
-```
-ImportError: cannot import name 'NitaCallbackError' from 'nita_sdk.client'
-```
-
-(reproduit en conteneur Odoo 17 réel — voir
-`.superpowers/sdd/odoo/e2e-report.md`, Finding 1.)
-
-**Ce module importe correctement l'API publique documentée du SDK** — ce
-n'est pas un défaut de `payment_nita`, c'est le paquet PyPI qui est en retard
-sur le monorepo `nita-sdks` (le module `callback.py` y a été ajouté par le
-commit `ec20fd5`, **après** la publication `0.1.0b1`, jamais republiée
-depuis).
-
-**Prérequis bloquant avant toute installation réelle** : tant que
-`nita-transfert-sdk` n'est pas republié sur PyPI avec `nita_sdk.client.callback`
-inclus, installez le SDK depuis la **source du monorepo `nita-sdks`**
-(branche `main`) plutôt que depuis PyPI, par exemple :
-
-```bash
-pip install "git+https://github.com/NITA-Transfert/nita-sdks.git#subdirectory=sdks/python"
-# ou, en clone local :
-pip install -e /chemin/vers/nita-sdks/sdks/python
-```
-
-Adaptez le sous-répertoire à la structure réelle du monorepo au moment de
-l'installation. Une fois `nita-transfert-sdk` republié sur PyPI avec
-`callback.py` inclus, le `pip install nita-transfert-sdk` standard
-ci-dessous redevient suffisant — vérifiez `pip index versions
-nita-transfert-sdk` avant de décider.
-
 ## Prérequis
 
 - **Odoo 17.0**, self-hosted ou Odoo.sh. **Odoo Online (SaaS) n'est pas
@@ -58,10 +18,9 @@ nita-transfert-sdk` avant de décider.
   qu'Odoo utilise réellement** (le virtualenv/l'image du serveur Odoo, pas
   un venv de développement local) :
   ```bash
-  pip install nita-transfert-sdk
+  pip install "nita-transfert-sdk>=0.1.0b2"
   ```
-  — en tenant compte de l'avertissement ci-dessus tant que la republication
-  PyPI n'est pas faite.
+  (0.1.0b2 minimum : première version publiée avec `NitaClient` et `url_retour`).
 - Un compte partenaire NITA (login, clé API, mot de passe, secret HMAC) et
   l'URL de base de l'API (sandbox ou production).
 
