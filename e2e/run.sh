@@ -181,12 +181,12 @@ PYEOF
 }
 
 echo
-echo "=== 5. Objectif 2 : callback GET non signe, transaction inconnue -> 200 ignored ==="
+echo "=== 5. Objectif 2 : callback GET non signe, transaction inconnue -> 200, corps identique ==="
 OUT=$(get_callback "E2E-CODE-INCONNU")
-if [ "${OUT##* }" = "200" ] && [[ "$OUT" == *'"ignored"'* ]]; then
+if [ "${OUT##* }" = "200" ] && [[ "$OUT" == *'"received"'* ]]; then
     pass "GET non signe, code inconnu -> $OUT"
 else
-    fail "GET non signe, code inconnu -> $OUT (attendu 200 ignored)"
+    fail "GET non signe, code inconnu -> $OUT (attendu 200 received)"
 fi
 
 echo
@@ -200,12 +200,12 @@ else
 fi
 
 echo
-echo "=== 7. Rappel immediat -> 200 throttled (1 relecture / 15 s) ==="
+echo "=== 7. Rappel immediat -> 200 (1 relecture / 15 s, 'throttled' au journal) ==="
 OUT=$(get_callback "E2E-CODE-DONE")
-if [ "${OUT##* }" = "200" ] && [[ "$OUT" == *'"throttled"'* ]]; then
+if [ "${OUT##* }" = "200" ] && [[ "$OUT" == *'"received"'* ]]; then
     pass "Rappel immediat -> $OUT"
 else
-    fail "Rappel immediat -> $OUT (attendu 200 throttled)"
+    fail "Rappel immediat -> $OUT (attendu 200 received)"
 fi
 
 echo

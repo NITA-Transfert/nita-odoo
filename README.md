@@ -109,9 +109,10 @@ Puis :
   transaction par `codeAchat`, relit le **statut réel** via `checkAchatStatus`
   puis confirme/annule. Code inconnu ou transaction déjà finale : aucun appel
   API. Une relecture par `codeAchat` au plus toutes les 15 s (table
-  `nita.callback.nonce`). Réponse toujours HTTP 200 `{"result": ...}`
-  (`paid`/`pending`/`failed`/`ignored`/`throttled`/`unavailable`) ; en cas
-  d'échec le cron de réconciliation rattrape.
+  `nita.callback.nonce`). Réponse toujours HTTP 200 avec le même corps
+  `{"result":"received"}` (rien ne dit à l'appelant si un code existe ; le
+  résultat détaillé va au journal Odoo) ; en cas d'échec le cron de
+  réconciliation rattrape.
 - **Réconciliation du montant** : si le montant engagé auprès de NITA ne correspond
   plus à la transaction (commande modifiée entre-temps), la transaction
   n'est **jamais** validée automatiquement — elle reste en attente de

@@ -24,7 +24,9 @@ class NitaController(http.Controller):
         JSON signe. Dans les deux cas on ignore `status` et la signature : on retrouve
         la transaction par codeAchat puis on relit le STATUT REEL via
         `_nita_reconcile_live()` (montant fige, idempotence). Repond toujours 200
-        (nitasys-api remonte toute reponse non-2xx comme une erreur de paiement) ;
+        avec le MEME corps {"result":"received"} : nitasys-api remonte toute reponse
+        non-2xx comme une erreur de paiement, et un corps variable dirait a n'importe
+        qui si un code d'achat existe ou est paye. Le detail ne va qu'au journal ;
         le cron rattrape les echecs. Au plus une relecture par codeAchat / 15 s.
         """
         try:
@@ -63,8 +65,10 @@ class NitaController(http.Controller):
 
     @staticmethod
     def _webhook_json(result):
+        # Resultat detaille au journal seulement : la reponse est identique dans tous les cas.
+        _logger.info("NITA webhook: %s", result)
         return request.make_response(
-            json.dumps({'result': result}),
+            json.dumps({'result': 'received'}),
             headers=[('Content-Type', 'application/json')], status=200)
 
     @http.route('/payment/nita/return', type='http', auth='public', methods=['GET'],

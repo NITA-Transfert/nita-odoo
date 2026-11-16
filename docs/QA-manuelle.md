@@ -21,9 +21,9 @@ Le script est idempotent (rejouable sans nettoyage prealable) et valide :
    dans un Odoo 17 reel.
 2. **Callback NITA non signe** : GET `/payment/nita/webhook?status=1&transaction_id=<codeAchat>`
    (ou POST JSON `{"status","transaction_id"}`), sans signature, toujours
-   reponse 200 `{"result": ...}`. Le callback n'est qu'un declencheur : le
+   reponse 200 `{"result":"received"}`. Le callback n'est qu'un declencheur : le
    statut reel est relu via checkAchatStatus (jamais cru sur `status`).
-   Code inconnu -> `ignored` ; rappel dans les 15 s -> `throttled` ; statut
+   Code inconnu -> `ignored` au journal ; rappel dans les 15 s -> `throttled` au journal ; statut
    reel injoignable (E2E sans sandbox) -> transaction jamais `done`.
 3. **`createAchat` live** (optionnel, voir section 3 ci-dessous) : nécessite
    un sandbox NITA joignable, gardé par variables d'environnement.
