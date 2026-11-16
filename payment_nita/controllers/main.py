@@ -1,54 +1,71 @@
+import json
 import logging
 
 from odoo import http
 from odoo.http import request
 from odoo.addons.payment.controllers.portal import PaymentPortal as _BasePaymentPortal
 
+from ..lib.callback import extract_code_achat
+
 _logger = logging.getLogger(__name__)
+
+RECHECK_TTL = 15  # secondes : une relecture NITA par codeAchat au plus
 
 
 class NitaController(http.Controller):
 
-    @http.route('/payment/nita/webhook', type='http', auth='public', methods=['POST'],
+    @http.route('/payment/nita/webhook', type='http', auth='public', methods=['GET', 'POST'],
                 csrf=False, save_session=False)
     def nita_webhook(self, **kwargs):
-        """Callback v2 NITA (POST JSON signé HMAC X-NT-*).
+        """Callback NITA : simple DECLENCHEUR, jamais une preuve.
 
-        La signature porte sur les octets BRUTS du corps : on ne lit JAMAIS
-        `request.get_json_data()` (qui re-sérialiserait). Le secret HMAC vient
-        du provider `code='nita'` actif (jamais d'un secret global). Anti-rejeu
-        persistant via `nita.callback.nonce._remember`. Ne paie jamais via
-        l'API : ne fait que vérifier + déléguer au framework `payment`.
+        En production NITA notifie par un GET non signe
+        (`?status=1&transaction_id=<codeAchat>`) ; certains etats arrivent en POST
+        JSON signe. Dans les deux cas on ignore `status` et la signature : on retrouve
+        la transaction par codeAchat puis on relit le STATUT REEL via
+        `_nita_reconcile_live()` (montant fige, idempotence). Repond toujours 200
+        (nitasys-api remonte toute reponse non-2xx comme une erreur de paiement) ;
+        le cron rattrape les echecs. Au plus une relecture par codeAchat / 15 s.
         """
-        from nita_sdk.client import NitaCallbackError, verify_callback
-
-        raw = request.httprequest.get_data()  # octets bruts (ne pas re-sérialiser)
-        headers = dict(request.httprequest.headers)
-
-        provider = request.env['payment.provider'].sudo().search(
-            [('code', '=', 'nita')], limit=1)
-        if not provider or not provider.nita_hmac_secret:
-            _logger.warning("NITA webhook: aucun provider NITA actif avec secret HMAC")
-            return request.make_response('', status=401)
-
-        nonce_model = request.env['nita.callback.nonce'].sudo()
         try:
-            data = verify_callback(
-                raw, headers, provider.nita_hmac_secret,
-                is_new_nonce=lambda n, ttl: nonce_model._remember(n, ttl))
-        except NitaCallbackError:
-            _logger.warning("NITA webhook: signature/callback refusé")
-            return request.make_response('', status=401)
+            raw = request.httprequest.get_data()
         except Exception:
-            _logger.exception("NITA webhook: échec inattendu de la vérification")
-            return request.make_response('', status=401)
-
+            raw = b''
+        code = extract_code_achat(kwargs.get('transaction_id'), raw)
+        tx = None
+        if code:
+            tx = request.env['payment.transaction'].sudo().search(
+                [('nita_code_achat', '=', code), ('provider_code', '=', 'nita')], limit=1)
+        if not tx:
+            return self._webhook_json('ignored')
+        if tx.state in ('done', 'cancel', 'error'):
+            return self._webhook_json(
+                'paid' if tx.state == 'done' else 'failed')
         try:
-            request.env['payment.transaction'].sudo()._handle_notification_data('nita', data)
+            fresh = request.env['nita.callback.nonce'].sudo()._remember(
+                'recheck:%s' % code, RECHECK_TTL)
         except Exception:
-            _logger.exception("NITA webhook: traitement de la notification a échoué")
-            return request.make_response('', status=500)
-        return request.make_response('', status=200)
+            _logger.exception("NITA webhook: anti-rafale indisponible pour %s", code)
+            return self._webhook_json('unavailable')
+        if not fresh:
+            return self._webhook_json('throttled')
+        try:
+            with request.env.cr.savepoint():
+                tx._nita_reconcile_live()
+        except Exception:
+            _logger.exception("NITA webhook: relecture du statut a echoue pour %s", code)
+            return self._webhook_json('unavailable')
+        if tx.state == 'done':
+            return self._webhook_json('paid')
+        if tx.state in ('cancel', 'error'):
+            return self._webhook_json('failed')
+        return self._webhook_json('pending')
+
+    @staticmethod
+    def _webhook_json(result):
+        return request.make_response(
+            json.dumps({'result': result}),
+            headers=[('Content-Type', 'application/json')], status=200)
 
     @http.route('/payment/nita/return', type='http', auth='public', methods=['GET'],
                 csrf=False, save_session=False)

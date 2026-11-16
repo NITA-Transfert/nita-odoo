@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # E2E payment_nita : installe le module dans un vrai Odoo 17, puis valide le
-# callback v2 signe (sans dependre d'un sandbox NITA vivant).
+# callback NITA non signe (declencheur ; sans dependre d'un sandbox NITA vivant).
 #
 # Objectifs couverts (voir plan Task 10) :
 #   1. Install propre du module payment_nita dans Odoo 17 (LE check cle).
-#   2. Callback signe -> transaction `done` ; rejeu refuse ; signature
-#      invalide -> 401 ; montant incoherent -> jamais valide automatiquement.
+#   2. Callback non signe (GET ou POST) -> toujours 200 ; transaction inconnue
+#      ignoree ; le `status` recu n'est jamais cru (statut reel relu, ici
+#      injoignable -> jamais `done`) ; relecture limitee a 1 / 15 s.
 #   3. createAchat live (sandbox NITA reel) : OPTIONNEL, gardee par variables
 #      d'env (voir section en bas). Sans elles : documentee, non executee,
 #      non bloquante.
@@ -38,32 +39,13 @@ pass() { RESULTS+=("PASS - $1"); PASS=$((PASS+1)); echo "[PASS] $1"; }
 fail() { RESULTS+=("FAIL - $1"); FAIL=$((FAIL+1)); echo "[FAIL] $1"; }
 info() { echo "[....] $1"; }
 
-# --- Helper : calcule timestamp/nonce/signature HMAC pour un corps JSON, et
-#     imprime 4 lignes (ts, nonce, sig, body) a capturer via command
-#     substitution. NE JAMAIS `source` du JSON brut (les guillemets internes
-#     seraient avales par le shell) : toujours capturer via $() + sed -n Np,
-#     comme fait ci-dessous.
-sign_callback() {
-    local status="$1" transaction_id="$2" secret="$3"
-    python3 - "$status" "$transaction_id" "$secret" <<'EOF'
-import hmac, hashlib, time, uuid, json, sys
-status, transaction_id, secret = sys.argv[1], sys.argv[2], sys.argv[3]
-body = json.dumps({"status": status, "transaction_id": transaction_id}, separators=(",", ":"))
-ts = str(int(time.time()))
-nonce = uuid.uuid4().hex
-msg = (ts + "\n" + nonce + "\n" + body).encode("utf-8")
-sig = hmac.new(secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()
-print(ts); print(nonce); print(sig); print(body)
-EOF
+# --- Helpers : callback NITA reel = GET non signe ?status=1&transaction_id=<codeAchat>
+#     (POST JSON non signe accepte aussi). Renvoient "<code HTTP> <corps>".
+get_callback() {
+    curl -s -w " %{http_code}" "${BASE_URL}/payment/nita/webhook?status=1&transaction_id=$1"
 }
-
-# POST un callback signe (ou volontairement mal signe) et renvoie le code HTTP.
 post_callback() {
-    local ts="$1" nonce="$2" sig="$3" body="$4"
-    curl -s -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/payment/nita/webhook" \
-        -H "Content-Type: application/json" \
-        -H "X-NT-TIMESTAMP: $ts" -H "X-NT-NONCE: $nonce" -H "X-NT-SIGNATURE: $sig" \
-        --data-raw "$body"
+    curl -s -w " %{http_code}" -X POST "${BASE_URL}/payment/nita/webhook"         -H "Content-Type: application/json" --data-raw "$1"
 }
 
 echo "=== 1. Stack Docker (build + up) ==="
@@ -153,7 +135,7 @@ provider.write({
 pm = env.ref('payment.payment_method_unknown')
 partner = env.ref('base.main_partner')
 
-# TX1 : montant engage == montant transaction -> callback valide doit faire 'done'.
+# TX1 : montant engage == montant transaction.
 env['payment.transaction'].search([('reference', '=', 'E2E-TX-DONE')]).unlink()
 tx1 = env['payment.transaction'].create({
     'provider_id': provider.id, 'payment_method_id': pm.id,
@@ -164,7 +146,7 @@ tx1 = env['payment.transaction'].create({
 })
 
 # TX2 : montant engage (15000) != montant courant de la commande (20000)
-# -> callback 'paye' valide mais ne doit JAMAIS passer 'done' automatiquement.
+# -> ne doit JAMAIS passer 'done' automatiquement.
 env['payment.transaction'].search([('reference', '=', 'E2E-TX-MISMATCH')]).unlink()
 tx2 = env['payment.transaction'].create({
     'provider_id': provider.id, 'payment_method_id': pm.id,
@@ -199,50 +181,41 @@ PYEOF
 }
 
 echo
-echo "=== 5. Objectif 2 : callback signe -> transaction 'done' ==="
-OUT=$(sign_callback "1" "E2E-CODE-DONE" "testsecret")
-TS=$(printf '%s\n' "$OUT" | sed -n '1p'); NONCE=$(printf '%s\n' "$OUT" | sed -n '2p')
-SIG=$(printf '%s\n' "$OUT" | sed -n '3p'); BODY=$(printf '%s\n' "$OUT" | sed -n '4p')
+echo "=== 5. Objectif 2 : callback GET non signe, transaction inconnue -> 200 ignored ==="
+OUT=$(get_callback "E2E-CODE-INCONNU")
+if [ "${OUT##* }" = "200" ] && [[ "$OUT" == *'"ignored"'* ]]; then
+    pass "GET non signe, code inconnu -> $OUT"
+else
+    fail "GET non signe, code inconnu -> $OUT (attendu 200 ignored)"
+fi
 
-CODE=$(post_callback "$TS" "$NONCE" "$SIG" "$BODY")
+echo
+echo "=== 6. GET non signe, transaction connue -> 200, jamais 'done' sur la foi du status ==="
+OUT=$(get_callback "E2E-CODE-DONE")
 STATE=$(read_tx_state "E2E-TX-DONE" | grep "^STATE=" | cut -d= -f2)
-if [ "$CODE" = "200" ] && [ "$STATE" = "done" ]; then
-    pass "Callback signe valide -> HTTP $CODE, transaction state=$STATE"
+if [ "${OUT##* }" = "200" ] && [ "$STATE" != "done" ]; then
+    pass "GET non signe, code connu -> $OUT, transaction state=$STATE (statut reel injoignable : pas 'done')"
 else
-    fail "Callback signe valide -> HTTP $CODE, transaction state=$STATE (attendu 200/done)"
+    fail "GET non signe, code connu -> $OUT, state=$STATE (attendu 200, jamais done sans statut reel)"
 fi
 
 echo
-echo "=== 6. Rejeu du meme nonce -> refuse (401), idempotent ==="
-REPLAY_CODE=$(post_callback "$TS" "$NONCE" "$SIG" "$BODY")
-STATE_AFTER_REPLAY=$(read_tx_state "E2E-TX-DONE" | grep "^STATE=" | cut -d= -f2)
-if [ "$REPLAY_CODE" = "401" ] && [ "$STATE_AFTER_REPLAY" = "done" ]; then
-    pass "Rejeu du nonce -> HTTP $REPLAY_CODE, etat inchange ($STATE_AFTER_REPLAY)"
+echo "=== 7. Rappel immediat -> 200 throttled (1 relecture / 15 s) ==="
+OUT=$(get_callback "E2E-CODE-DONE")
+if [ "${OUT##* }" = "200" ] && [[ "$OUT" == *'"throttled"'* ]]; then
+    pass "Rappel immediat -> $OUT"
 else
-    fail "Rejeu du nonce -> HTTP $REPLAY_CODE, etat=$STATE_AFTER_REPLAY (attendu 401/done)"
+    fail "Rappel immediat -> $OUT (attendu 200 throttled)"
 fi
 
 echo
-echo "=== 7. Signature invalide -> 401 ==="
-BAD_SIG="${SIG:0:-4}dead"
-BAD_CODE=$(post_callback "$TS" "deadbeefdeadbeefdeadbeefdeadbeef" "$BAD_SIG" "$BODY")
-if [ "$BAD_CODE" = "401" ]; then
-    pass "Signature invalide -> HTTP $BAD_CODE"
-else
-    fail "Signature invalide -> HTTP $BAD_CODE (attendu 401)"
-fi
-
-echo
-echo "=== 8. Montant incoherent -> jamais valide automatiquement ==="
-OUT2=$(sign_callback "1" "E2E-CODE-MISMATCH" "testsecret")
-TS2=$(printf '%s\n' "$OUT2" | sed -n '1p'); NONCE2=$(printf '%s\n' "$OUT2" | sed -n '2p')
-SIG2=$(printf '%s\n' "$OUT2" | sed -n '3p'); BODY2=$(printf '%s\n' "$OUT2" | sed -n '4p')
-CODE2=$(post_callback "$TS2" "$NONCE2" "$SIG2" "$BODY2")
+echo "=== 8. POST JSON non signe, montant incoherent -> 200, jamais valide automatiquement ==="
+OUT=$(post_callback '{"status":"1","transaction_id":"E2E-CODE-MISMATCH"}')
 STATE2=$(read_tx_state "E2E-TX-MISMATCH" | grep "^STATE=" | cut -d= -f2)
-if [ "$CODE2" = "200" ] && [ "$STATE2" != "done" ]; then
-    pass "Montant incoherent -> HTTP $CODE2, transaction state=$STATE2 (pas 'done')"
+if [ "${OUT##* }" = "200" ] && [ "$STATE2" != "done" ]; then
+    pass "POST non signe -> $OUT, transaction state=$STATE2 (pas 'done')"
 else
-    fail "Montant incoherent -> HTTP $CODE2, transaction state=$STATE2 (ne doit jamais etre 'done')"
+    fail "POST non signe -> $OUT, state=$STATE2 (ne doit jamais etre 'done')"
 fi
 
 echo
