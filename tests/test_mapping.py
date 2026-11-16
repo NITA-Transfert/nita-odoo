@@ -36,6 +36,9 @@ def test_build_achat_args_rejects_non_xof():
     with pytest.raises(ValueError):
         build_achat_args(**_base(currency='EUR'))
 
+def test_build_achat_args_accepte_le_xaf():
+    assert build_achat_args(**_base(currency='XAF'))['montant_transaction'] == build_achat_args(**_base())['montant_transaction']
+
 def test_build_achat_args_requires_phone():
     with pytest.raises(ValueError):
         build_achat_args(**_base(phone='  '))

@@ -51,7 +51,7 @@ du statut réel (jamais sur la foi du callback lui-même ni du retour navigateur
 
 Puis :
 
-- Vérifiez que la devise de la société/du site est bien **XOF** — le
+- Vérifiez que la devise de la société/du site est bien **XOF** (Niger) ou **XAF** (Tchad) — le
   provider se déclare indisponible pour toute autre devise
   (`_get_supported_currencies`), par défense en profondeur côté module.
 - Passez l'**État** de « Désactivé » à **Test** ou **Activé** selon
@@ -97,7 +97,7 @@ Puis :
 
 **Dans ce v1 :**
 - Odoo **17.0** uniquement.
-- Devise **XOF** uniquement.
+- Devise : franc CFA uniquement, **XOF** (Niger) ou **XAF** (Tchad), avec l'URL d'API du même pays.
 - Flux de paiement **par redirection** uniquement (page NITA hébergée).
 - E-commerce (`website_sale`) et paiement de facture au portail (même
   provider).
