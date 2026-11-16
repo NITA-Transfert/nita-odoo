@@ -6,48 +6,8 @@ Voir la spec et le plan dans le dépôt Nita_developer_portal (docs/superpowers)
 
 Le module encaisse une commande e-commerce (`website_sale`) ou une facture au
 portail client via NITA : le client est redirigé vers la page de paiement
-NITA, et la commande/facture est validée par le **callback v2 signé** envoyé
-par NITA (jamais par le simple retour navigateur).
-
-## ⚠️ Avertissement bloquant — paquet PyPI en retard
-
-La version actuellement publiée sur PyPI, **`nita-transfert-sdk==0.1.0b1`**
-(seule version disponible à ce jour), **ne contient pas** le module
-`nita_sdk.client.callback` (`verify_callback`, `NitaCallbackError`) que le
-controller webhook de ce module importe
-(`payment_nita/controllers/main.py`). Un `pip install nita-transfert-sdk`
-« à la lettre » installe donc un SDK qui **plante à l'import** dès la
-première notification NITA :
-
-```
-ImportError: cannot import name 'NitaCallbackError' from 'nita_sdk.client'
-```
-
-(reproduit en conteneur Odoo 17 réel — voir
-`.superpowers/sdd/odoo/e2e-report.md`, Finding 1.)
-
-**Ce module importe correctement l'API publique documentée du SDK** — ce
-n'est pas un défaut de `payment_nita`, c'est le paquet PyPI qui est en retard
-sur le monorepo `nita-sdks` (le module `callback.py` y a été ajouté par le
-commit `ec20fd5`, **après** la publication `0.1.0b1`, jamais republiée
-depuis).
-
-**Prérequis bloquant avant toute installation réelle** : tant que
-`nita-transfert-sdk` n'est pas republié sur PyPI avec `nita_sdk.client.callback`
-inclus, installez le SDK depuis la **source du monorepo `nita-sdks`**
-(branche `main`) plutôt que depuis PyPI, par exemple :
-
-```bash
-pip install "git+https://github.com/NITA-Transfert/nita-sdks.git#subdirectory=sdks/python"
-# ou, en clone local :
-pip install -e /chemin/vers/nita-sdks/sdks/python
-```
-
-Adaptez le sous-répertoire à la structure réelle du monorepo au moment de
-l'installation. Une fois `nita-transfert-sdk` republié sur PyPI avec
-`callback.py` inclus, le `pip install nita-transfert-sdk` standard
-ci-dessous redevient suffisant — vérifiez `pip index versions
-nita-transfert-sdk` avant de décider.
+NITA, et la commande/facture est validée à la réception du **callback NITA**, qui déclenche la relecture
+du statut réel (jamais sur la foi du callback lui-même ni du retour navigateur).
 
 ## Prérequis
 
@@ -58,10 +18,9 @@ nita-transfert-sdk` avant de décider.
   qu'Odoo utilise réellement** (le virtualenv/l'image du serveur Odoo, pas
   un venv de développement local) :
   ```bash
-  pip install nita-transfert-sdk
+  pip install "nita-transfert-sdk>=0.1.0b2"
   ```
-  — en tenant compte de l'avertissement ci-dessus tant que la republication
-  PyPI n'est pas faite.
+  (0.1.0b2 minimum : première version publiée avec `NitaClient` et `url_retour`).
 - Un compte partenaire NITA (login, clé API, mot de passe, secret HMAC) et
   l'URL de base de l'API (sandbox ou production).
 
@@ -88,7 +47,7 @@ nita-transfert-sdk` avant de décider.
 | Login | identifiant partenaire NITA |
 | Clé API | clé API partenaire |
 | Mot de passe | mot de passe partenaire |
-| Secret HMAC | secret utilisé pour signer/vérifier les appels et callbacks |
+| Secret HMAC | secret utilisé pour signer/vérifier le jeton de retour navigateur (plus exigé pour le callback) |
 
 Puis :
 
@@ -103,14 +62,17 @@ Puis :
 - Les 4 champs d'identifiants (login, clé API, mot de passe, secret HMAC)
   sont `groups='base.group_system'` : réservés aux administrateurs système,
   jamais réaffichés en clair aux autres profils.
-- Le callback est en **v2, POST JSON signé** (en-têtes `X-NT-*`, HMAC avec
-  le secret du provider) — vérifié par `verify_callback` avant tout
-  traitement ; une signature invalide est rejetée (HTTP 401), la
-  transaction n'est jamais touchée.
-- **Anti-rejeu persistant** : chaque nonce de callback est mémorisé
-  (modèle `nita.callback.nonce`) ; un callback rejoué (même signature,
-  même corps) est refusé, la transaction reste inchangée.
-- **Réconciliation du montant** : si le montant du callback ne correspond
+- Le callback NITA (`/payment/nita/webhook`, **GET non signé** `?status=1&transaction_id=<codeAchat>`
+  en production, POST JSON accepté aussi) n'est qu'un **déclencheur** : ni le
+  `status` reçu ni une signature ne sont utilisés. Le module retrouve la
+  transaction par `codeAchat`, relit le **statut réel** via `checkAchatStatus`
+  puis confirme/annule. Code inconnu ou transaction déjà finale : aucun appel
+  API. Une relecture par `codeAchat` au plus toutes les 15 s (table
+  `nita.callback.nonce`). Réponse toujours HTTP 200 avec le même corps
+  `{"result":"received"}` (rien ne dit à l'appelant si un code existe ; le
+  résultat détaillé va au journal Odoo) ; en cas d'échec le cron de
+  réconciliation rattrape.
+- **Réconciliation du montant** : si le montant engagé auprès de NITA ne correspond
   plus à la transaction (commande modifiée entre-temps), la transaction
   n'est **jamais** validée automatiquement — elle reste en attente de
   vérification manuelle.
@@ -125,10 +87,9 @@ Puis :
    en XOF, le numéro MyNITA, et l'URL de callback du module ; il reçoit
    `codeAchat` + `urlPaiement`, puis redirige le client vers `urlPaiement`.
 3. Le client paie sur la page NITA.
-4. NITA poste le **callback v2 signé** vers
-   `/payment/nita/webhook` → vérification de signature + anti-rejeu →
-   la transaction passe `done` (ou `cancel`/`error` selon le statut NITA).
-   C'est le callback, pas le retour navigateur, qui fait foi.
+4. NITA notifie `/payment/nita/webhook` (GET non signé) → le module relit le
+   statut réel (`checkAchatStatus`) → la transaction passe `done` (ou
+   `cancel`/`error` selon le statut NITA). Le cron rattrape un callback perdu.
 5. Le client est ramené sur la page de confirmation Odoo
    (`/payment/nita/return` → `/payment/status`).
 

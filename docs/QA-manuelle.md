@@ -19,13 +19,12 @@ Le script est idempotent (rejouable sans nettoyage prealable) et valide :
    le conteneur). C'est le check le plus important : il prouve que tous les
    modeles, vues, xpath, donnees et assets du module se chargent sans erreur
    dans un Odoo 17 reel.
-2. **Callback v2 signe** : POST sur `/payment/nita/webhook` avec un corps JSON
-   et les en-tetes `X-NT-TIMESTAMP`/`X-NT-NONCE`/`X-NT-SIGNATURE` calcules
-   avec le secret HMAC du provider -> transaction passee a `done`. Puis :
-   rejeu du meme nonce (refuse, 401, etat inchange), signature invalide
-   (401), et montant incoherent entre l'achat NITA engage et la commande
-   actuelle (callback accepte mais transaction JAMAIS validee automatiquement
-   — reste `pending`, pour verification manuelle).
+2. **Callback NITA non signe** : GET `/payment/nita/webhook?status=1&transaction_id=<codeAchat>`
+   (ou POST JSON `{"status","transaction_id"}`), sans signature, toujours
+   reponse 200 `{"result":"received"}`. Le callback n'est qu'un declencheur : le
+   statut reel est relu via checkAchatStatus (jamais cru sur `status`).
+   Code inconnu -> `ignored` au journal ; rappel dans les 15 s -> `throttled` au journal ; statut
+   reel injoignable (E2E sans sandbox) -> transaction jamais `done`.
 3. **`createAchat` live** (optionnel, voir section 3 ci-dessous) : nécessite
    un sandbox NITA joignable, gardé par variables d'environnement.
 
@@ -106,8 +105,9 @@ main dans un vrai navigateur (l'E2E automatise ne clique jamais l'IHM) :
 4. Verifier la redirection vers `urlPaiement` (template
    `payment_nita.redirect_form`).
 5. **Ne payez jamais reellement.** Revenez en arriere ou laissez expirer :
-   le callback (section 1) est la seule source de verite pour l'etat de la
-   transaction, jamais le retour navigateur.
+   le statut reel NITA (relu a la reception du callback ou par le cron) est la
+   seule source de verite pour l'etat de la transaction, jamais le retour
+   navigateur ni le contenu du callback.
 
 ## 5. Retour navigateur apres paiement — a faire par vous
 
@@ -137,12 +137,6 @@ au retour, sans attendre le cron de reconciliation. A verifier a la main
 
 ## 6. Dependance SDK — rappel
 
-`e2e/Dockerfile` installe `nita-transfert-sdk==0.1.0b1` (PyPI) **puis**
-ecrase `nita_sdk/client/callback.py` et `nita_sdk/client/__init__.py` par la
-version a jour du monorepo `nita-sdks` (voir `e2e/sdk-patch/README.md`) : au
-2026-10-01, le paquet PyPI publie ne contient pas encore
-`verify_callback`/`NitaCallbackError`. **Ce correctif est uniquement dans ce
-kit E2E, pas dans `payment_nita`.** Pour un deploiement reel aujourd'hui
-(hors de ce kit Docker), le webhook `/payment/nita/webhook` plantera a
-l'import tant que `nita-transfert-sdk` n'est pas republie sur PyPI avec ce
-module inclus — a signaler/suivre separement (depot `nita-sdks`).
+`e2e/Dockerfile` installe `nita-transfert-sdk==0.1.0b2` depuis PyPI (premiere
+version publiee avec `NitaClient` et `url_retour`). Aucun correctif local du SDK
+n'est necessaire : le webhook n'importe plus `nita_sdk.client.callback`.
