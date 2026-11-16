@@ -1,0 +1,54 @@
+<section class="oe_container">
+  <div class="oe_row oe_spaced">
+    <h2 class="oe_slogan" style="color:#024d93;">NITA Payment Provider</h2>
+    <h3 class="oe_slogan">Accept MyNITA wallet payments on your Odoo shop and invoices</h3>
+    <p class="oe_mt32">
+      NITA Transfert is a money transfer and mobile wallet service. This module adds NITA as a
+      payment provider in Odoo: your customer chooses NITA at checkout, is redirected to the
+      secure NITA payment page, pays from a MyNITA wallet, and comes back to your shop.
+      The order or invoice is then confirmed automatically.
+    </p>
+  </div>
+</section>
+<section class="oe_container oe_dark">
+  <div class="oe_row oe_spaced">
+    <h3 class="oe_slogan">How it works</h3>
+    <ul>
+      <li>The customer selects NITA and enters a MyNITA number.</li>
+      <li>Odoo creates the purchase at NITA and redirects to the NITA payment page.</li>
+      <li>After payment, the customer returns to your shop. The transaction is confirmed only
+          after Odoo has read the real payment status from the NITA API.</li>
+      <li>A scheduled job reconciles pending payments, so a lost notification never leaves a paid order unconfirmed.</li>
+    </ul>
+  </div>
+</section>
+<section class="oe_container">
+  <div class="oe_row oe_spaced">
+    <h3 class="oe_slogan">Built for safety</h3>
+    <ul>
+      <li>Notifications are never trusted: the payment status always comes from the authenticated NITA API.</li>
+      <li>Amount check: a transaction whose amount changed after the payment request is never confirmed automatically.</li>
+      <li>API requests are signed (HMAC-SHA256). Credentials are visible to administrators only.</li>
+      <li>Test mode with the NITA sandbox before going live.</li>
+    </ul>
+  </div>
+</section>
+<section class="oe_container oe_dark">
+  <div class="oe_row oe_spaced">
+    <h3 class="oe_slogan">Requirements</h3>
+    <ul>
+      <li>Odoo 17.0, self-hosted or Odoo.sh. Not available on Odoo Online, because a Python package is required.</li>
+      <li>Python package <code>nita-transfert-sdk</code>, version 0.1.0b2 or later, installed in the Odoo environment.</li>
+      <li>A NITA partner account with the Online Purchase product. The API key, login, password and
+          HMAC secret are in your NITA developer space.</li>
+      <li>Shop currency: CFA franc, XOF (Niger) or XAF (Chad).</li>
+    </ul>
+    <h3 class="oe_slogan">Setup</h3>
+    <ol>
+      <li>Install the Python package, then install this module.</li>
+      <li>Open Invoicing, Configuration, Payment Providers, then NITA.</li>
+      <li>Enter the API base URL and your credentials, then enable the provider, in Test mode first.</li>
+    </ol>
+    <p>Support: <a href="mailto:support@nitatransfert.com">support@nitatransfert.com</a></p>
+  </div>
+</section>

@@ -1,8 +1,6 @@
 # nita-odoo
 
-Plugin de paiement NITA pour Odoo 17 (module `payment_nita`).
-Voir la spec et le plan dans le dépôt Nita_developer_portal (docs/superpowers) :
-[spec de conception](../Nita_developer_portal/docs/superpowers/specs/2026-10-01-nita-odoo-plugin-design.md).
+Plugin de paiement NITA pour Odoo 17 (module `payment_nita`). Licence LGPL-3.
 
 Le module encaisse une commande e-commerce (`website_sale`) ou une facture au
 portail client via NITA : le client est redirigé vers la page de paiement
@@ -51,7 +49,7 @@ du statut réel (jamais sur la foi du callback lui-même ni du retour navigateur
 
 Puis :
 
-- Vérifiez que la devise de la société/du site est bien **XOF** — le
+- Vérifiez que la devise de la société/du site est bien **XOF** (Niger) ou **XAF** (Tchad) — le
   provider se déclare indisponible pour toute autre devise
   (`_get_supported_currencies`), par défense en profondeur côté module.
 - Passez l'**État** de « Désactivé » à **Test** ou **Activé** selon
@@ -97,7 +95,7 @@ Puis :
 
 **Dans ce v1 :**
 - Odoo **17.0** uniquement.
-- Devise **XOF** uniquement.
+- Devise : franc CFA uniquement, **XOF** (Niger) ou **XAF** (Tchad), avec l'URL d'API du même pays.
 - Flux de paiement **par redirection** uniquement (page NITA hébergée).
 - E-commerce (`website_sale`) et paiement de facture au portail (même
   provider).
@@ -116,7 +114,7 @@ bash bin/build.sh
 ```
 
 Produit `payment_nita-17.0.zip` à la racine du repo : le dossier
-`payment_nita/` seul (élagué de `tests/`, `e2e/`, `.git`, `.superpowers`,
+`payment_nita/` seul (élagué de `tests/`, `e2e/`, `.git`,
 `__pycache__`). Ce zip s'installe via **Apps > Mettre à jour la liste des
 Apps** (ou en le décompressant directement dans `extra-addons`). Le script
 est robuste au répertoire d'appel (chemins relatifs à son propre
@@ -125,9 +123,5 @@ emplacement) et ne requiert pas l'utilitaire `zip` (repli automatique sur
 
 ## Pour aller plus loin
 
-- Spec de conception complète :
-  `Nita_developer_portal/docs/superpowers/specs/2026-10-01-nita-odoo-plugin-design.md`
 - QA manuelle détaillée (checkout réel, créneaux à vérifier à la main) :
   `docs/QA-manuelle.md`
-- Rapport E2E (install réelle, callback signé, limites constatées) :
-  `.superpowers/sdd/odoo/e2e-report.md`

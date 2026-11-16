@@ -1,5 +1,7 @@
 from odoo import fields, models
 
+from ..lib.mapping import SUPPORTED_CURRENCIES
+
 
 class PaymentProvider(models.Model):
     _inherit = 'payment.provider'
@@ -13,10 +15,10 @@ class PaymentProvider(models.Model):
     nita_hmac_secret = fields.Char("Secret HMAC", required_if_provider='nita', groups='base.group_system')
 
     def _get_supported_currencies(self):
-        """NITA encaisse uniquement en francs CFA (XOF)."""
+        """NITA encaisse uniquement en francs CFA : XOF (Niger) et XAF (Tchad)."""
         currencies = super()._get_supported_currencies()
         if self.code == 'nita':
-            currencies = currencies.filtered(lambda c: c.name == 'XOF')
+            currencies = currencies.filtered(lambda c: c.name in SUPPORTED_CURRENCIES)
         return currencies
 
     def _nita_client(self):

@@ -1,10 +1,14 @@
 {
-    'name': 'NITA - Paiement en ligne',
-    'version': '17.0.1.1.0',
+    'name': 'NITA Payment Provider',
+    'version': '17.0.1.2.0',
     'category': 'Accounting/Payment Providers',
-    'summary': 'Encaissez via NITA (Achat en ligne)',
+    'summary': 'Accept MyNITA wallet payments on your shop and invoices',
     'author': 'NITA Transfert',
-    'license': 'OPL-1',
+    'maintainer': 'NITA Transfert',
+    'website': 'https://developers.nitatransfert.com',
+    'support': 'support@nitatransfert.com',
+    'license': 'LGPL-3',
+    'images': ['static/description/banner.png'],
     'depends': ['payment', 'website_sale'],
     'external_dependencies': {'python': ['nita_sdk']},
     'data': [

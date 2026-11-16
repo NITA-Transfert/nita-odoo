@@ -9,15 +9,19 @@ def request_id_for_order(reference):
         clean = 'odoo'
     return clean[:100]
 
+# Francs CFA encaissés par NITA : XOF (Niger) et XAF (Tchad). L'API ne reçoit pas la devise :
+# elle est celle de l'organisation NITA visée par l'URL de base.
+SUPPORTED_CURRENCIES = ('XOF', 'XAF')
+
 def amount_xof(total):
-    """Montant envoyé à NITA : le XOF n'a pas de décimales."""
+    """Montant envoyé à NITA : le franc CFA (XOF, XAF) n'a pas de décimales."""
     return int(round(float(total)))
 
 def build_achat_args(*, reference, total, currency, items, callback_url, phone, ip='', return_url=''):
     """Construit les arguments de createAchat (attributs snake du modèle SDK).
     Géoloc omise (facultative pour l'achat en ligne). Lève ValueError si invalide."""
-    if str(currency or '').upper() != 'XOF':
-        raise ValueError('NITA: devise non supportée (XOF requis)')
+    if str(currency or '').upper() not in SUPPORTED_CURRENCIES:
+        raise ValueError('NITA: devise non supportée (XOF ou XAF requis)')
     phone = str(phone or '').strip()
     if not phone:
         raise ValueError('NITA: numéro MyNITA (phoneClient) requis')

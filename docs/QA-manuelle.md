@@ -60,8 +60,7 @@ Reverifie dans le conteneur apres correctif :
 - `e2e/run.sh` rejoue : toujours 6/6 PASS (ce correctif ne touche pas le
   chemin callback).
 
-Le checkout n'est donc plus bloque par ce manque. Detail complet dans
-`.superpowers/sdd/odoo/e2e-report.md` (section « Finding 2 (corrige) »).
+Le checkout n'est donc plus bloque par ce manque.
 
 ## 3. `createAchat` live contre un sandbox NITA reel — a faire par vous
 
@@ -80,7 +79,7 @@ bash e2e/run.sh
 
 Avec ces 5 variables definies, le script (etape 9) reconfigure le provider
 avec vos vrais identifiants, cree une transaction de test (1000 XOF,
-`nita_phone='0022700000001'`, cf. memory "wallet de test sandbox") et appelle
+`nita_phone='0022700000001'`, le wallet de test de la sandbox) et appelle
 `tx._get_specific_rendering_values({})` directement (contourne l'IHM —
 le point 2 ci-dessus l'empeche de toute facon pour l'instant). Verifiez dans
 `e2e/.out/live_achat.log` que `api_url` est bien une URL de paiement NITA, et
